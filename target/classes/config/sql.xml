@@ -19,9 +19,4 @@
 		 "IMAGE_NAME", "IMAGE_WIDTH", "IMAGE_HEIGHT", "IMAGE_SDATE", "IMAGE_MAXVALUE", "IMAGE_MINVALUE", "IMAGE_AVERAGE")
 		VALUES (#{imageName}, #{imageWidth}, #{imageHeight}, #{imageSdate}, #{imageMax}, #{imageMin}, #{imageAvg});
     </update>
-<!--     <update id="insertProfile" parameterType="hashmap"> -->
-<!-- 	    INSERT INTO public."IMAGE_PROFILE"( -->
-<!-- 		 "IMAGE_NAME") -->
-<!-- 		VALUES (#{name}); -->
-<!--     </update> -->
 </mapper>
