@@ -16,7 +16,8 @@ import org.apache.http.protocol.HttpContext;
 
 public class HttpPostClient {
 	public static void main(String[] args) {
-		post("http://localhost:8080/profile");
+//		post("http://localhost:8080/profile");
+		postImage("http://localhost:8080/profile");
 	}
 	
 	public static void post(String url) {
@@ -38,6 +39,26 @@ public class HttpPostClient {
 	    } catch (IOException e) {
 	        e.printStackTrace();
 	    }
+	}
+	public static void postImage(String url) {
+		HttpClient httpClient = new DefaultHttpClient();
+		HttpContext localContext = new BasicHttpContext();
+		HttpPost httpPost = new HttpPost(url);
+		httpPost.addHeader("Content-Type", "multipart/form-data");
+		
+		try {
+			MultipartEntity entity = new MultipartEntity(HttpMultipartMode.BROWSER_COMPATIBLE);
+			String organizedfilePath = "C:/Temp/test.jpg"; // 전송할 파일 경로
+			File file1 = new File(organizedfilePath); // 파일을 생성해줍니다.
+			entity.addPart("imageTest", new FileBody(file1,"image/jpeg"));
+			httpPost.setEntity(entity);
+			
+			HttpResponse response = httpClient.execute(httpPost);
+			System.out.println(response.getStatusLine());
+			
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
 	}
 	
 }

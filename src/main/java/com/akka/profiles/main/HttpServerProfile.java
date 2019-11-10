@@ -3,9 +3,14 @@ package com.akka.profiles.main;
 
 import static akka.http.javadsl.server.PathMatchers.longSegment;
 
+import java.awt.image.BufferedImage;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
@@ -14,10 +19,18 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 
+import javax.imageio.ImageIO;
+import javax.xml.bind.DatatypeConverter;
+
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
+
+import com.drew.imaging.jpeg.JpegMetadataReader;
+import com.drew.metadata.Directory;
+import com.drew.metadata.Metadata;
+import com.drew.metadata.Tag;
 
 import akka.Done;
 import akka.NotUsed;
@@ -32,9 +45,7 @@ import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.AllDirectives;
 import akka.http.javadsl.server.Route;
 import akka.http.javadsl.unmarshalling.Unmarshaller;
-import akka.japi.Pair;
 import akka.stream.ActorMaterializer;
-import akka.stream.javadsl.FileIO;
 import akka.stream.javadsl.Flow;
 
 public class HttpServerProfile extends AllDirectives {
@@ -42,7 +53,6 @@ public class HttpServerProfile extends AllDirectives {
 	static ActorSystem system = ActorSystem.create("routes");
 	final static Http http = Http.get(system);
     final static ActorMaterializer materializer = ActorMaterializer.create(system);
-
     public interface IDao {
     	public void insertProfile(Map map);
     	}
@@ -154,25 +164,37 @@ public class HttpServerProfile extends AllDirectives {
     	  maybeItem.map(item -> completeOK(item, Jackson.marshaller()))
     	  .orElseGet(() -> complete(StatusCodes.NOT_FOUND, "Not Found"))
     			  );
-      }))),
+      })))
+      ,
       post(() ->
       path("profile", () -> 
-      entity(Unmarshaller.entityToMultipartFormData(), formData -> {
-//        	  System.out.println(formData.getParts());
-    	  final CompletionStage<HashMap<String, Object>> allParts; 
-    	  allParts = formData.getParts().mapAsync(1, bodypart->{
-    		  final File file = File.createTempFile("upload", "tmp");
-    		  return bodypart.getEntity().getDataBytes()
-    				  .runWith(FileIO.toPath(file.toPath()), materializer)
-    				  .thenApply(ignore ->
-    				  new Pair<String, Object>(bodypart.getName(), file)
-    						  );
-    		  
-    	  }).runFold(new HashMap<String, Object>(), (acc, pair) -> {
-    		  acc.put(pair.first(), pair.second());
-    		  return acc;
-    	  }, materializer);;
-    	  System.out.println(allParts.toString());
+    	  entity(Unmarshaller.entityToByteArray(), byteData -> {
+    	  try {
+    		  	File imageFile = new File("C:/Temp/test.jpg");
+    	        Path path = imageFile.toPath();
+    	        byte[] data = Files.readAllBytes(path);
+    	        String str = DatatypeConverter.printBase64Binary(data);
+    	        byte [] data2 = DatatypeConverter.parseBase64Binary(str);
+
+    	        InputStream inputStream = new ByteArrayInputStream(data2);
+    	        BufferedInputStream bis = new BufferedInputStream(inputStream);
+    	        
+    	        Metadata metadata = JpegMetadataReader.readMetadata(bis);
+    	        for (Directory directory : metadata.getDirectories()) {
+    	            for (Tag tag : directory.getTags()) {
+    	                System.out.format("[%s] - %s = %s", directory.getName(), tag.getTagName(), tag.getDescription());
+    	                System.out.println();
+    	            }
+    	            if (directory.hasErrors()) {
+    	                for (String error : directory.getErrors()) {
+    	                    System.err.format("ERROR: %s", error);
+    	                    System.err.println();
+    	                }
+    	            }
+    	        }
+    	    } catch (Exception e) {
+    	        throw new RuntimeException("Failed to read the image from bytes.", e);
+    	    }
     	  saveProfile();
     	  return onSuccess(CompletableFuture.completedFuture(Done.getInstance()), done ->
     	  complete("order created")
@@ -181,5 +203,5 @@ public class HttpServerProfile extends AllDirectives {
       
     );
   }
-
+  
 }
