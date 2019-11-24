@@ -88,9 +88,9 @@ public class ImageStatisticsActor extends UntypedAbstractActor {
 			}
 		}
 
-	    result.put("averageR", r_sum/(width+height));
-	    result.put("averageG", g_sum/(width+height));
-	    result.put("averageB", b_sum/(width+height));
+	    result.put("averageR", r_sum/(width*height));
+	    result.put("averageG", g_sum/(width*height));
+	    result.put("averageB", b_sum/(width*height));
 	    
 	    result.put("maxR", r_max);
 	    result.put("maxG", g_max);

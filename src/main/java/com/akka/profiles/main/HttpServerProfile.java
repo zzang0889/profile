@@ -12,9 +12,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
-import java.util.function.Function;
-
-import javax.naming.Context;
 
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
@@ -23,27 +20,20 @@ import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 
 import com.akka.profiles.actor.ReadImageActor;
 
-import akka.Done;
 import akka.NotUsed;
 import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
 import akka.actor.Props;
-import akka.event.Logging;
-import akka.event.LoggingAdapter;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.marshallers.jackson.Jackson;
-import akka.http.javadsl.marshalling.Marshaller;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
 import akka.http.javadsl.model.Multipart.FormData;
 import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.AllDirectives;
-import akka.http.javadsl.server.Directives;
-import akka.http.javadsl.server.RequestContext;
 import akka.http.javadsl.server.Route;
-import akka.http.javadsl.server.directives.RouteAdapter;
 import akka.http.javadsl.unmarshalling.Unmarshaller;
 import akka.japi.Pair;
 import akka.stream.Materializer;
@@ -74,46 +64,7 @@ public class HttpServerProfile extends AllDirectives {
       .thenAccept(unbound -> system.terminate()); // and shutdown when done
   }
 
-  // (fake) async database query api
-  private CompletableFuture<Optional<List<Map<String, Object>>>> fetchProfile() {
-	  List<Map<String, Object>> profileList = null;
-	  InputStream is = null;
-	  SqlSession session = null;
-		try {
-			is = Resources.getResourceAsStream("config/myBitisConfig.xml");
-			sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
-			session = sqlSessionFactory.openSession();
-			profileList = session.selectList("profile.getProfile");
-		} catch (IOException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
-		} finally {
-			session.close();
-		}
-    return CompletableFuture.completedFuture(Optional.of(profileList));
-  }
-  
-  private CompletableFuture<Optional<List<Map<String, Object>>>> fetchProfileOne(long seq) {
-	  List<Map<String, Object>> profile = null;
-	  InputStream is = null;
-	  SqlSession session = null;
-	  try {
-		  is = Resources.getResourceAsStream("config/myBitisConfig.xml");
-		  sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
-		  session = sqlSessionFactory.openSession();
-		  profile = session.selectList("profile.getProfileOne",seq);
-	  } catch (IOException e) {
-		  // TODO Auto-generated catch block
-		  e.printStackTrace();
-	  } finally {
-		  session.close();
-	  }
-	  return CompletableFuture.completedFuture(Optional.of(profile));
-  }
-  
-
   private Route createRoute() {
-    Unmarshaller.requestToEntity();
 	return concat(
 //    GET /profile 리스트 조회
     
@@ -182,5 +133,42 @@ public class HttpServerProfile extends AllDirectives {
 			return "ok";
 		});
 	}
+  
+  
+  private CompletableFuture<Optional<List<Map<String, Object>>>> fetchProfile() {
+	  List<Map<String, Object>> profileList = null;
+	  InputStream is = null;
+	  SqlSession session = null;
+		try {
+			is = Resources.getResourceAsStream("config/myBitisConfig.xml");
+			sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
+			session = sqlSessionFactory.openSession();
+			profileList = session.selectList("profile.getProfile");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} finally {
+			session.close();
+		}
+    return CompletableFuture.completedFuture(Optional.of(profileList));
+  }
+  
+  private CompletableFuture<Optional<List<Map<String, Object>>>> fetchProfileOne(long seq) {
+	  List<Map<String, Object>> profile = null;
+	  InputStream is = null;
+	  SqlSession session = null;
+	  try {
+		  is = Resources.getResourceAsStream("config/myBitisConfig.xml");
+		  sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
+		  session = sqlSessionFactory.openSession();
+		  profile = session.selectList("profile.getProfileOne",seq);
+	  } catch (IOException e) {
+		  // TODO Auto-generated catch block
+		  e.printStackTrace();
+	  } finally {
+		  session.close();
+	  }
+	  return CompletableFuture.completedFuture(Optional.of(profile));
+  }
 
 }

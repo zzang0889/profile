@@ -3,9 +3,12 @@ package com.akka.profiles.actor;
 import akka.actor.ActorRef;
 import akka.actor.Props;
 import akka.actor.UntypedAbstractActor;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 
 public class ReadImageActor extends UntypedAbstractActor {
-	
+	LoggingAdapter log = Logging.getLogger(getContext().getSystem(), this);
+
 	private ActorRef ImageStatisticsActor;
 	private ActorRef ImportServiceActor;
 	private int count = 0;
@@ -18,7 +21,6 @@ public class ReadImageActor extends UntypedAbstractActor {
 	@Override
 	public void onReceive(Object file) throws Throwable {
 		if(count>=1) {
-			System.out.println("done");
 			ImportServiceActor.tell(file, getSelf());
 			context().system().terminate();
 		} else {
