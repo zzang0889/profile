@@ -3,69 +3,65 @@ package com.akka.profiles.main;
 
 import static akka.http.javadsl.server.PathMatchers.longSegment;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
+import java.util.function.Function;
 
-import javax.xml.bind.DatatypeConverter;
+import javax.naming.Context;
 
 import org.apache.ibatis.io.Resources;
 import org.apache.ibatis.session.SqlSession;
 import org.apache.ibatis.session.SqlSessionFactory;
 import org.apache.ibatis.session.SqlSessionFactoryBuilder;
 
-import com.drew.imaging.jpeg.JpegMetadataReader;
-import com.drew.metadata.Directory;
-import com.drew.metadata.Metadata;
-import com.drew.metadata.Tag;
+import com.akka.profiles.actor.ReadImageActor;
 
 import akka.Done;
 import akka.NotUsed;
+import akka.actor.ActorRef;
 import akka.actor.ActorSystem;
+import akka.actor.Props;
+import akka.event.Logging;
+import akka.event.LoggingAdapter;
 import akka.http.javadsl.ConnectHttp;
 import akka.http.javadsl.Http;
 import akka.http.javadsl.ServerBinding;
 import akka.http.javadsl.marshallers.jackson.Jackson;
+import akka.http.javadsl.marshalling.Marshaller;
 import akka.http.javadsl.model.HttpRequest;
 import akka.http.javadsl.model.HttpResponse;
+import akka.http.javadsl.model.Multipart.FormData;
 import akka.http.javadsl.model.StatusCodes;
 import akka.http.javadsl.server.AllDirectives;
+import akka.http.javadsl.server.Directives;
+import akka.http.javadsl.server.RequestContext;
 import akka.http.javadsl.server.Route;
+import akka.http.javadsl.server.directives.RouteAdapter;
 import akka.http.javadsl.unmarshalling.Unmarshaller;
 import akka.japi.Pair;
-import akka.stream.ActorMaterializer;
+import akka.stream.Materializer;
 import akka.stream.javadsl.FileIO;
 import akka.stream.javadsl.Flow;
 
 public class HttpServerProfile extends AllDirectives {
 	private static SqlSessionFactory sqlSessionFactory;
 	static ActorSystem system = ActorSystem.create("routes");
-	final static Http http = Http.get(system);
-    final static ActorMaterializer materializer = ActorMaterializer.create(system);
-    public interface IDao {
-    	public void insertProfile(Map map);
-    	}
+	final static Materializer materializer = Materializer.createMaterializer(system);
+	
   public static void main(String[] args) throws Exception {
     // boot up server using the route as defined below
-//    ActorSystem system = ActorSystem.create("routes");
-//
-//    final Http http = Http.get(system);
-//    final ActorMaterializer materializer = ActorMaterializer.create(system);
-
+    final Http http = Http.get(system);
+    
     //In order to access all directives we need an instance where the routes are define.
 	  HttpServerProfile app = new HttpServerProfile();
-
+	  
     final Flow<HttpRequest, HttpResponse, NotUsed> routeFlow = app.createRoute().flow(system, materializer);
     final CompletionStage<ServerBinding> binding = http.bindAndHandle(routeFlow,
       ConnectHttp.toHost("localhost", 8080), materializer);
@@ -114,40 +110,13 @@ public class HttpServerProfile extends AllDirectives {
 	  }
 	  return CompletableFuture.completedFuture(Optional.of(profile));
   }
-
-  // (fake) async database query api
-  private CompletionStage<Done> saveProfile() {
-		  HashMap<String, Object> profile = new HashMap<String, Object>();
-		  InputStream is = null;
-		  SqlSession session = null;
-		  profile.put("imageName", "test");
-		  profile.put("imageWidth", 1);
-		  profile.put("imageHeight", 2);
-		  profile.put("imageSdate", LocalDate.now());
-		  profile.put("imageMax", 55);
-		  profile.put("imageMin", 22);
-		  profile.put("imageAvg", 33);
-		  
-		  try {
-			  is = Resources.getResourceAsStream("config/myBitisConfig.xml");
-			  sqlSessionFactory = new SqlSessionFactoryBuilder().build(is);
-			  session = sqlSessionFactory.openSession();
-			  int suss = session.insert("profile.insertProfile", profile);
-			  session.commit();
-		  } catch (IOException e) {
-			  // TODO Auto-generated catch block
-			  e.printStackTrace();
-		  } finally {
-			  session.close();
-		  }
-		return CompletableFuture.completedFuture(Done.getInstance());
-  }
-
   
 
   private Route createRoute() {
-    return concat(
+    Unmarshaller.requestToEntity();
+	return concat(
 //    GET /profile 리스트 조회
+    
       get(() ->
           path("profile", () -> {
             final CompletableFuture<Optional<List<Map<String, Object>>>> profileList = fetchProfile();
@@ -168,111 +137,50 @@ public class HttpServerProfile extends AllDirectives {
       ,
       post(() ->
       path("profile", () -> 
-    	  entity(Unmarshaller.entityToMultipartFormData(), formData -> {
-    		  System.out.println(formData.toStrict(1, materializer));
-    		  System.out.println(formData);
-    	  try {
-    		  final CompletionStage<Map<String, Object>> allParts =
-    		  formData.getParts().mapAsync(1, bodyPart->{
-    			  System.out.println(bodyPart.getName());
-    			  if ("imageTest".equals(bodyPart.getName())) {
-    		          // stream into a file as the chunks of it arrives and return a CompletionStage
-    		          // file to where it got stored
-    		          final File file = File.createTempFile("upload", "tmp");
-    		          return bodyPart.getEntity().getDataBytes()
-    		            .runWith(FileIO.toPath(file.toPath()), materializer)
-    		            .thenApply(ignore ->
-    		              new Pair<String, Object>(bodyPart.getName(), file)
-    		            );
-    		        } else {
-    		          // collect form field values
-    		          return bodyPart.toStrict(2 * 1000, materializer)
-    		            .thenApply(strict ->
-    		              new Pair<String, Object>(bodyPart.getName(),
-    		                strict.getEntity().getData().utf8String())
-    		            );
-    		        }
-    		  }).runFold(new HashMap<String, Object>(), (acc, pair) -> {
-    		        acc.put(pair.first(), pair.second());
-    		        return acc;
-    		      }, materializer);
-    		  
-    		// simulate a DB call
-    		  System.out.println(allParts);
-    		  CompletableFuture<Map<String, Object>> test  = allParts.toCompletableFuture();
-    		  
-//    		  final CompletionStage<Void> done = allParts.thenCompose(map -> map.get(""));
-//    		  return onSuccess(allParts, x -> complete("ok!"));
-    		  File imageFile = (File) test.get().get("imageTest");
-//    		  	File imageFile = new File("C:/Temp/test.jpg");
-    	        Path path = imageFile.toPath();
-    	        byte[] data = Files.readAllBytes(path);
-//    	        String str = DatatypeConverter.printBase64Binary(byteData);
-    	        String str = DatatypeConverter.printBase64Binary(data);
-    	        byte [] data2 = DatatypeConverter.parseBase64Binary(str);
-//    	        byte [] data2 = DatatypeConverter.parseBase64Binary(test.get().get("imageTest").toString());
-
-    	        InputStream inputStream = new ByteArrayInputStream(data2);
-    	        BufferedInputStream bis = new BufferedInputStream(inputStream);
-    	        Metadata metadata = JpegMetadataReader.readMetadata(bis);
-    	        for (Directory directory : metadata.getDirectories()) {
-    	            for (Tag tag : directory.getTags()) {
-    	                System.out.format("[%s] - %s = %s", directory.getName(), tag.getTagName(), tag.getDescription());
-    	                System.out.println();
-    	            }
-    	            if (directory.hasErrors()) {
-    	                for (String error : directory.getErrors()) {
-    	                    System.err.format("ERROR: %s", error);
-    	                    System.err.println();
-    	                }
-    	            }
-    	        }
-    	    } catch (Exception e) {
-    	        throw new RuntimeException("Failed to read the image from bytes.", e);
-    	    }
-    	  saveProfile();
-    	  return onSuccess(CompletableFuture.completedFuture(Done.getInstance()), done ->
-    	  complete("order created")
-    			  );
+          entity(Unmarshaller.entityToMultipartFormData(), requestBody  -> {
+    	  CompletionStage<String> after = importImageProfileFromRequest(requestBody);
+    	  return onSuccess(after, done -> complete("order created"));
       })))
-//      ,
-//      post(() ->
-//      path("profile", () -> 
-//    	  entity(Unmarshaller.entityToByteArray(), byteData -> {
-//    	  try {
-//    		  	File imageFile = new File("C:/Temp/test.png");
-//    	        Path path = imageFile.toPath();
-//    	        byte[] data = Files.readAllBytes(path);
-//    	        String str = DatatypeConverter.printBase64Binary(byteData);
-////    	        String str = DatatypeConverter.printBase64Binary(data);
-//    	        byte [] data2 = DatatypeConverter.parseBase64Binary(str);
-//
-//    	        InputStream inputStream = new ByteArrayInputStream(data2);
-//    	        BufferedInputStream bis = new BufferedInputStream(inputStream);
-//    	        
-//    	        Metadata metadata = JpegMetadataReader.readMetadata(bis);
-//    	        for (Directory directory : metadata.getDirectories()) {
-//    	            for (Tag tag : directory.getTags()) {
-//    	                System.out.format("[%s] - %s = %s", directory.getName(), tag.getTagName(), tag.getDescription());
-//    	                System.out.println();
-//    	            }
-//    	            if (directory.hasErrors()) {
-//    	                for (String error : directory.getErrors()) {
-//    	                    System.err.format("ERROR: %s", error);
-//    	                    System.err.println();
-//    	                }
-//    	            }
-//    	        }
-//    	    } catch (Exception e) {
-//    	        throw new RuntimeException("Failed to read the image from bytes.", e);
-//    	    }
-//    	  saveProfile();
-//    	  return onSuccess(CompletableFuture.completedFuture(Done.getInstance()), done ->
-//    	  complete("order created")
-//    			  );
-//      })))
-      
     );
   }
+
   
+  protected CompletionStage<String> importImageProfileFromRequest(FormData requestFile) {
+		  CompletionStage<HashMap<String, Object>> filesFuture  = requestFile.getParts().mapAsync(1, bodyPart->{
+					  if ("image".equals(bodyPart.getName())) {
+			          // stream into a file as the chunks of it arrives and return a CompletionStage
+			          // file to where it got stored
+			          final File file = File.createTempFile("upload", "tmp");
+			          return bodyPart.getEntity().getDataBytes()
+			            .runWith(FileIO.toPath(file.toPath()), materializer)
+			            .thenApply(ignore ->
+			              new Pair<String, Object>(bodyPart.getName(), file)
+			            );
+			        } else {
+			          // collect form field values
+			          return bodyPart.toStrict(2 * 1000, materializer)
+			            .thenApply(strict ->
+			              new Pair<String, Object>(bodyPart.getName(),
+			                strict.getEntity().getData().utf8String())
+			            );
+			        }
+				}).runFold(new HashMap<String, Object>(), (acc, pair) -> {
+			        acc.put(pair.first(), pair.second());
+			        return acc;
+			      }, materializer);
+
+		return filesFuture.thenApply(files -> {
+			try {
+				ActorSystem actorSystem = ActorSystem.create("ImageProcess");
+				ActorRef ReadImageActor = actorSystem.actorOf(Props.create(ReadImageActor.class), "ReadImageActor");
+				ReadImageActor.tell(files, ActorRef.noSender());
+			} catch (Exception e) {
+				// TODO: handle exception
+				throw new RuntimeException("Failed to read the image from bytes.", e);
+			}
+//			
+			return "ok";
+		});
+	}
+
 }

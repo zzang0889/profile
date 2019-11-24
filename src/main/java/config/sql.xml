@@ -16,7 +16,7 @@
     </select>
     <update id="insertProfile" parameterType="hashmap">
 	    INSERT INTO public."IMAGE_PROFILE"(
-		 "IMAGE_NAME", "IMAGE_WIDTH", "IMAGE_HEIGHT", "IMAGE_SDATE", "IMAGE_MAXVALUE", "IMAGE_MINVALUE", "IMAGE_AVERAGE")
-		VALUES (#{imageName}, #{imageWidth}, #{imageHeight}, #{imageSdate}, #{imageMax}, #{imageMin}, #{imageAvg});
+		 "IMAGE_NAME", "WIDTH", "HEIGHT", "SDATE", "MAX_R", "MAX_G", "MAX_B", "MIN_R", "MIN_G", "MIN_B", "AVERAGE_R", "AVERAGE_G", "AVERAGE_B", "HISTOGRAM_R", "HISTOGRAM_G", "HISTOGRAM_B")
+		VALUES (#{imageName}, #{imageWidth}, #{imageHeight}, #{imageSdate}, #{maxR}, #{maxG}, #{maxB}, #{minR}, #{minG}, #{minB}, #{averageR}, #{averageG}, #{averageB}, #{histogramR}, #{histogramG}, #{histogramB});
     </update>
 </mapper>
